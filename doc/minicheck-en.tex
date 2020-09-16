@@ -1,0 +1,336 @@
+\documentclass[a4paper,10pt]{article}
+
+\usepackage{amsthm}
+\usepackage{newtxtext,newtxmath}
+\usepackage{enumitem}
+\usepackage[cache=false]{minted}
+\usepackage{url}
+\usepackage{typearea}
+
+\typearea{12}
+
+\bibliographystyle{plain}
+
+\theoremstyle{definition}
+\newtheorem{example}{Example}
+
+\title{Generating Higher-Order Functions\\with Integrated Shrinking}
+\author{TSUYUSATO Kitsune}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+  Property-Based-Testing is one of the program testing methods, that checks a property of the program by generating input data automatically.
+  Also, one of the important functions of this is shrinking a counterexample for clear and verifiability.
+  Known Property-Based-Testing libraries provide generating and shrinking as individual functions, but there is a way, called Integrated Shrinking, to integrate them by using a tree data structure.
+  This paper shows a way to generate higher-order functions with Integrated Shrinking.
+  Note that the way to generate and shrink higher-order functions that take a function is not known generally.
+\end{abstract}
+
+\section{Introduction}
+
+Property-Based-Testing is one of the program testing methods, that checks the correctness of a property provided as a program by generating input data automatically.
+QuickCheck~\cite{claessen_quickcheck_2011} and SmallCheck~\cite{runciman_smallcheck_2008} are one of the libraries that provide Property-Based-Testing functions.
+
+There are two ways to implement Property-Based-Testing.
+
+\begin{itemize}
+  \item Generating random values by using Pseudo-Random-Number-Generator (PRNG).\\QuickCheck is the common library in this way.
+  \item Enumerating small values in a sequential order. SmallCheck is the common library in this way.
+\end{itemize}
+
+The first can generate wide values to test, but it has randomness.
+In contrast, the second is hard or impossible to generate large values.
+Each way has advantages and disadvantages.
+
+In this paper, we go on the first way, which uses PRNG.
+We expect this type Property-Based-Testing library to display a simple counterexample when the property is false.
+Finding a simple counterexample is called \textit{shrinking}.
+
+\begin{example}[Finding a Counterexample and Shrinking]
+The following code checks the property "all integer values are positive".
+Of course this property is false and a counterexample is found quickly.
+The above counterexample in comment is not shrunk, so it takes a large value \texttt{-1002642896}.
+However, the below counterexample is shrunk, thus it takes the smallest value \texttt{-1}.
+
+\begin{minted}{scala}
+findCounterExampleNoShrink(intGen)(_ > 0) // Some(-1002642896)
+findCounterExample(intGen)(_ > 0)         // Some(-1)
+\end{minted}
+\end{example}
+
+To shrink a counterexample, in QuickCheck, it applies a shrinking function repeatedly.
+This method works well, but it has some problems.
+For instance, a value generator and a shrinking function are individual, thus we need to maintain them always.
+Avoiding this problem, Hedgehog\cite{hedgehog_online} uses another way called Integrated Shrinking.
+It uses a tree data structure to represent shrinking history.
+Integrated Shrinking is described in details at Section \ref{subsec:integrated-shrinking}.
+
+Generating and shrinking functions is one of the challenges of Property-Based-Testing libraries.
+Because domains of a function may be infinite, we cannot show a function without shrinking.
+There are some preceding studies for generating and shrinking functions~\cite{claessen_shrinking_2012,koopman_automatic_2006}~.
+Also, the way to generate and shrink arbitrary higher-order functions is not known generally.
+
+Finally, we describe this paper's contributions.
+
+\begin{itemize}
+  \item Fixes thw known method to generate and shrink functions for coworking with Integrated Shrinking.
+  \item Shows the method to generate and shrink higher-order functions take a function as the argument.
+\end{itemize}
+
+\begin{example}[Generaing and Shrinking Higher-Order Functions]\label{exm:shrink}
+\texttt{\_ - 1000000000 >= 0} and \texttt{\_ >= 1000000000} seems the same function, but it is difference on the integer overflow.
+In the following example, the counterexample that dinstincts this case is found as expected.
+Of course the counterexample is shrunk enough.
+
+\begin{minted}{scala}
+findCounterExample(
+  funGen(functionCogen(intGen, booleanCogen), booleanGen)
+) { f => f(_ - 1000000000 >= 0) == f(_ >= 1000000000) }
+// Some({case {case -1147483649 => false} => true; case _ => false})
+\end{minted}
+\end{example}
+
+\section{Implementation}
+
+In this paper, Scala~\cite{scala_online} is used for implementing.
+Sclala is known as functional programming language, but it has a side of Object-Oriented-Programming (OOP) language.
+Especially Scala's function is represented as class on OOP, it is useful to view a data structure as a usual function easily, by inheriting a function class.
+But we will not use advanced features of Scala, knownledge of the basic Scala syntax is needed for reading in this section.
+
+In this section, though implementing a Property-Based-Testing library, we introduce Integrated Shrinking and propose the way to generate and shrink higher-order functions.
+
+\subsection{Integrated Shrinking}\label{subsec:integrated-shrinking}
+
+At first we describe how the existing library (like QuickCheck~\cite{claessen_quickcheck_2011}) generate and shrink values, and then introduce Integrated Shrinking with implementing.
+
+In QuickCheck, a generator object looks like the following.
+Where \texttt{Random} is an immutable PRNG type.
+In short, \texttt{gen} takes an PRNG as the argument, and returns a pair of an updated PRNG and a generated value.
+
+\inputminted[breaklines,firstline=31,lastline=35]{scala}{../src/main/scala/minicheck.scala}
+
+There are some utilities of \texttt{Gen}.
+\texttt{map} can create a new generator from a transform function, and \texttt{product} can combinate multiple generators.
+
+Next, shrinking is implemented as the following.
+It applies a shrinking function \texttt{s} recursively and finds the smallest counterexample that does not satisfy a propert \texttt{p}.
+Where a shirinking function is a function returns a list of smaller value than the argument in ascending order.
+Note that, when we said small on values, this \textit{small} does not mean small on mathematical ordering.
+We expect \textit{small value} to be better as a counterexample for showing than the current value.
+
+\inputminted[breaklines,firstline=37,lastline=38]{scala}{../src/main/scala/minicheck.scala}
+
+As examples, the following are shrinking functions for boolean and integer values.
+\texttt{sBool} returns a list containing only \texttt{false} on \texttt{true}, otherwise it returns an empty list, so it means \texttt{false} is considered as more preferable display than \texttt{true}.
+\texttt{sInt} is, for example \texttt{sInt(10) = LazyList(5, 8, 9)}, returns a list of values from \texttt{x/2} to \texttt{x-1}.
+It means a value nearing \texttt{0} is considered as preferable.
+
+\inputminted[breaklines,firstline=40,lastline=43]{scala}{../src/main/scala/minicheck.scala}
+
+A shrinking function for pairs are dervied from two shrinking functions.
+In this case, we consider a small left value is more preferable than a small right value.
+
+\inputminted[breaklines,firstline=45,lastline=47]{scala}{../src/main/scala/minicheck.scala}
+
+In QuickCheck, we can customize generators and shrinking functions for testing of our properties.
+However, a generator and a shrinking function are provided as individual.
+It is not good at some cases.
+For example, when you implement a generator for a new type, you should implement a shrinking function also.
+
+As a naive solution, we cane make a pair of a generator and a shrinking function.
+
+\inputminted[breaklines,firstline=49,lastline=49]{scala}{../src/main/scala/minicheck.scala}
+
+But, it causes another problem.
+The type parameter \texttt{A} is appeared at the argument part of shrinking function.
+So, we cannot define a utility function \texttt{map} to this type.
+
+To tackle this problem, we consider shrinking history as tree data structure.
+The parent of tree is a value applied to a shrinking function, and the result values of this application are children.
+Now, the generator returns this shrinking tree as a generated value instead of a single value.
+
+\inputminted[breaklines,firstline=51,lastline=66]{scala}{../src/main/scala/minicheck.scala}
+
+Where \texttt{expand} is a function to construct a tree structure with shrinking function application.
+Using this function, we can define a conversion from \texttt{GenShrink} to \texttt{Gen} (\texttt{Gen.from}).
+\texttt{map} is defined to \texttt{Gen}.
+And, a shrinking function of pairs is included in \texttt{product} definition.
+
+Such a way to integrate a shrinking function with a generator is called Integrated Shrinking.
+Integrated Shrinking is introduced by Syanley in 2017 ~\cite{stanley_gens_2017}.
+The common library of Integrated Shrinking implementation is Hedgehog~\cite{hedgehog_online}.
+The method to generate and shrink higher-order functions proposed by this paper are implemented on Integrated Shrinking.
+
+\subsection{Generating and Shrinking Functions}
+
+Before describing how to generate and shrink functions, we need to describe what PRNG is spilittable.
+When PRNG is spilittable, PRNG implements the following interface, and two PRNG after \texttt{split} are independent on satistical.
+SplitMix~\cite{steele_jr_fast_2014} is known as such a PRNG.
+
+\inputminted[breaklines,firstline=4,lastline=7]{scala}{../src/main/scala/minicheck.scala}
+
+If PRNG is splittable, we can influence PRNG according to the value, as the following.
+
+\inputminted[breaklines,firstline=68,lastline=70]{scala}{../src/main/scala/minicheck.scala}
+
+Then, we can construct a function generator from an influcne function \texttt{v} and a result value generator.
+
+\inputminted[breaklines,firstline=72,lastline=73]{scala}{../src/main/scala/minicheck.scala}
+
+We cannot show this generated function because it is not shrunk,
+so we introduce a delayed data structure \texttt{:=>} represents a partial function,
+and \texttt{Fun} which is a total version of \texttt{:=>} with the default value.
+
+\inputminted[breaklines,firstline=75,lastline=108]{scala}{../src/main/scala/minicheck.scala}
+
+\texttt{:=>} has the following operations.
+
+\begin{description}
+  \item[\texttt{map[C](f: B => C): A :=> C}.] transforms result values.
+  \item[\texttt{table: LazyList[(A, B)]}.] enumerates a pair of an argument and its result.
+  \item[\texttt{lift: A => Option[B]}.] turns this \texttt{:=>} into a usual function \texttt{=>}.
+\end{description}
+
+Also, case classes of \texttt{:=>} are the following meanings.
+
+\begin{description}
+  \item[\texttt{Empty[A, B] extends (A :=> B)}.] a partial function with an empty domain.
+  \item[\texttt{Point[B](y: B) extends (Unit :=> B)}.] a partial function from unit.
+  \item[\texttt{Choice[A, B, C](ab: A :=> C, bc: B :=> C) extends (Either[A, B] => C)}.] ~\newline
+    \hspace{2em} a partial function accepting \texttt{Either}.
+  \item[\texttt{Uncurry[A, B, C](abc: A :=> (B :=> C)) extends ((A, B) :=> C)}.] ~\newline
+    \hspace{2em} a curried partial function.
+  \item[\texttt{Iso[A, B, C](f: A => B, g: B => A, bc B :=> C) extends (A :=> C)}.] ~\newline
+    \hspace{2em} a partial function whose argument type is converted by both sides transformations.
+\end{description}
+
+Note that \texttt{:=>} is delayed but it represents a whole function if it is not shrunk.
+We need shrinking still before showing a function.
+
+Shrinking functions for \texttt{:=>} and \texttt{Fun} are the following.
+Where a function \texttt{s} is a shrinking function of the result type.
+
+\inputminted[breaklines,firstline=110,lastline=119]{scala}{../src/main/scala/minicheck.scala}
+
+If there are a influent function and a \texttt{:=>} builder from a usual function for a type, this type is valid for an argument type of a function generator.
+\texttt{CogenVariant} is such a type.
+
+\inputminted[breaklines,firstline=121,lastline=123]{scala}{../src/main/scala/minicheck.scala}
+
+Defines \texttt{CogenVariant} for some types.
+
+\inputminted[breaklines,firstline=125,lastline=141]{scala}{../src/main/scala/minicheck.scala}
+
+When we have \texttt{CogenVariant} and a result value generator, we can create a generator of \texttt{Fun}.
+\texttt{Fun} inherits a function class, so we can use this on the place expecting a function.
+
+\inputminted[breaklines,firstline=143,lastline=146]{scala}{../src/main/scala/minicheck.scala}
+
+Unfortunately \texttt{CogenVariant} does not cowork with Integrated Shrinking.
+Definition of a function \texttt{CogenVariant} is not clear also, then generating higher-order function is not fully supported.
+
+Observing a shrinking function of \texttt{:=>}, a part of shrinking \texttt{Choice} looks similar to \texttt{sProduct} implementation.
+From this observation, to construct \texttt{Choice} from \texttt{product} of two generators is considered as better.
+
+\inputminted[breaklines,firstline=148,lastline=151]{scala}{../src/main/scala/minicheck.scala}
+
+\texttt{imap} is utility to convert a type from both sides transformations.
+
+The above \texttt{Cogen} has a only method \texttt{build}, which returns a \texttt{:=>} generator.
+So, we can use this for \texttt{Choice} construction easily.
+See the following examples, which are a \texttt{Cogen} for basic types.
+
+\inputminted[breaklines,firstline=153,lastline=167]{scala}{../src/main/scala/minicheck.scala}
+
+Each definition are simpler than \texttt{CogenVariant} ones.
+It is benefits of Integrated Shrinking.
+
+The following code is a generator implementation of \texttt{Fun} with \texttt{Cogen}.
+It is simpler than \texttt{CogenVariant} version too.
+
+\inputminted[breaklines,firstline=169,lastline=170]{scala}{../src/main/scala/minicheck.scala}
+
+Finally, we propose how to generate and shrink higher-order functions.
+Considering to construct \texttt{Cogen[A => B]} from \texttt{g: Gen[A]} and \texttt{c: Cogen[B]}.
+The \texttt{build} function returns \texttt{Gen[(A => B) :=> C]} from \texttt{gc: Gen[C]}.
+We can get \texttt{A} value from \texttt{g}, and we can get \texttt{Gen[B :=> C]} from \texttt{c} and \texttt{gc}.
+Now, we can get \texttt{B} value from generated \texttt{A} value and the passed \texttt{A => B} function.
+It can pass to \texttt{Gen[B :=> C]} generator.
+Next, to get back \texttt{A => B} from \texttt{B}, we introduce a new type \texttt{LocalFun}, which means a function defined around \texttt{x} locally.
+We can show it easily because it is data structure.
+
+\inputminted[breaklines,firstline=172,lastline=178]{scala}{../src/main/scala/minicheck.scala}
+
+Note that it coworks with Integrated Shrinking, so we get a shrinking tree of higher-order functions for free.
+
+Appendix \ref{sec:appndix-1} is a complete source code of this Property-Based-Testing library containing implementations of a PRNG and a counterexample finder.
+
+\section{Discussion}
+
+\subsection{On the Implementation}
+
+We can extend the generator type by wrapping a generated value with \texttt{Option} to support restricting generated values like \texttt{Gen\#filter}.
+In this case, a partial function result type built by \texttt{Cogen} is wrapped by \texttt{Option} also.
+
+This implementation's \texttt{Gen} type are isomorphic to \texttt{type G[A] = State[Random, Tree[A]]}.
+It does not use monad transformer, so it is not a monad.
+In contrast, from its definition, it is functor and applicative clearly.
+We can use monad transformer to get valid monad instance of generators, but a generator result type becomes \texttt{Tree[(Random, A)]} in this case.
+Each children has PRNG, however only a root value is generated from PRNG.
+It is not sure how to deal with children's PRNG.
+Fortunately monad is not needed to generators in most cases, so we defined a generator in this way.
+
+For efficient shrinking, we can use the following \texttt{Unlift} instead of \texttt{Point}.
+
+\begin{minted}{scala}
+case class Unlift[A, B](dom: Set[A], f: A => B) extends (A :=> B)
+\end{minted}
+
+\texttt{Unlift} lifes a usal function \texttt{f} into a partial function with restricted domain \texttt{dom}.
+A shrinking function for this is defined by shrinking its domain.
+
+For now, higher-order function takes a function is shown as \texttt{\{case \{case x => y\} => ...\}}, but we can show it as \texttt{f => f(x) match \{ case y => ...\}} by implementing.
+The latter seems a source code more than the first.
+
+\subsection{Comparisons to Other Libraries}
+
+Compares to existing libraries.
+
+\begin{description}
+  \item[(QuickCheck\cite{claessen_quickcheck_2011})]
+    It supports generating and shrinking a function, but a generated function cannot take a function as its argument.
+    By using the external library~\cite{quickcheck-higherorder_online}, all higher-order functions are supported.
+    How to generate and shrink a function in this library is the same essentially in this paper, but it does not cowork with Inegrated Shrinking.
+  \item[(Hedgehog\cite{hedgehog_online})]
+    Integrated Shrinking, but it does not support generating a function.
+    By using the external library~\cite{hedgehog-fn_online}, it supports function generating and shrinking,
+    but it is port of QuickCheck implementation, so it has the same issues as QuickCheck.
+  \item[(SmallCheck\cite{runciman_smallcheck_2008}、Feat\cite{duregaard_feat_2012}、SmartCheck\cite{pike_smartcheck_2014}、LeanCheck\cite{matela_braquehais_tools_2017})]
+    Some libraries support to generate and shrink higher-order functions.
+    However, these libraries uses small value enumerating approach.
+    It is hard to find a counterexample of a property, whose counterexample is large like Example \ref{exm:shrink}.
+\end{description}
+
+This paper's proposed method is not splittable from Integrated Shrinking.
+It is possible to generate and shrink higher-order functions if \texttt{Cogen} returns a partial function generator.
+But it loses potentials of Integrated Shrinking of course.
+
+\section{Conclusion}
+
+Integrated Shrinking is a method to integrate with generating and shrinking values on Property-Based-Testing.
+It is implemented as returning a tree data structure representing a shrinking tree instead of a single value on generating.
+Also, providing a partial function generator from a result value generator makes possible to implement generating and shrinking higher-order functions.
+This paper shows Scala implementations of them.
+
+\bibliography{minicheck-en}
+
+\appendix
+
+\section{Property-Based-Testing Library Implemented by This Paper}\label{sec:appndix-1}
+
+\inputminted[breaklines]{scala}{../src/main/scala/minicheck.scala}
+
+\end{document}
