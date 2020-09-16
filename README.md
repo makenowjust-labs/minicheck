@@ -12,7 +12,7 @@ This is a research project to develop a state-of-the-art Property-Based-Testing 
   - *Higher-Order Functions*:
     To generate and shrinki higher-order functions is supported.
 
-See the paper for a detailed explanation.
+See the paper ([EN](https://github.com/MakeNowJust-Labo/minicheck/releases/download/20200916/minicheck-en-20200916.pdf), [JA](https://github.com/MakeNowJust-Labo/minicheck/releases/download/20200916/minicheck-ja-20200916.pdf)) for a detailed explanation.
 
 **NOTE**: This library is for demonstrating the research result.
           If you want a production-ready Property-Based-Testing library, please see [Hariko](https://github.com/MakeNowJust-Labo/hariko).
