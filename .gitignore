@@ -22,8 +22,8 @@ project/plugins/project/
 
 ### https://raw.github.com/github/gitignore/18aa6d83774d514da479d73a4beb864cd4220231/Global/Metals.gitignore
 
- # Generated Metals (Scala Language Server) files
- # Reference: https://scalameta.org/metals/
+# Generated Metals (Scala Language Server) files
+# Reference: https://scalameta.org/metals/
 .metals/
 .bloop/
 metals.sbt
