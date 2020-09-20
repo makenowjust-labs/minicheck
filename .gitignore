@@ -27,7 +27,3 @@ project/plugins/project/
 .metals/
 .bloop/
 metals.sbt
-
-
-docs/js/*
-docs/api/*
