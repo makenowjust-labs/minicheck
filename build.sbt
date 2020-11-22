@@ -20,6 +20,6 @@ lazy val root = project
       """.stripMargin,
     Compile / console / scalacOptions -= "-Wunused",
     // Settings for test:
-    libraryDependencies += "io.monix" %% "minitest" % "2.8.2" % Test,
+    libraryDependencies += "io.monix" %% "minitest" % "2.9.0" % Test,
     testFrameworks += new TestFramework("minitest.runner.Framework")
   )
