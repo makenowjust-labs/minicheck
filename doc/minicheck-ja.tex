@@ -1,29 +1,57 @@
-\documentclass[a4paper,xelatex,ja=standard,jafont=noto]{bxjsarticle}
+\documentclass[submit,PRO,onecolumn]{ipsj}
+
+\usepackage{PROpresentation}
+\PROheadtitle{y-n-(x): 情報処理学会プログラミング研究会 発表資料 Y年m月d日}
 
 \usepackage{amsthm}
 \usepackage{enumitem}
+\usepackage[dvipdfmx]{graphicx}
 \usepackage[cache=false]{minted}
 \usepackage{url}
-
-\bibliographystyle{plain}
 
 \theoremstyle{definition}
 \newtheorem{example}{例}
 
+% http://gaso.hatenablog.com/entry/2014/05/11/%E6%9F%90%E5%AD%A6%E4%BC%9A%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%81%AE%E3%82%B9%E3%82%BF%E3%82%A4%E3%83%AB%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E3%81%A7BibTeX%E3%82%92%E4%BD%BF%E3%81%A3%E3%81%9F%E6%99%82
+\def\newblock{\hskip .11em plus .33em minus .07em}
+
 \title{Integrated Shrinkingでの高階関数の自動生成}
-\author{露里きつね}
-\date{\today}
+\affiliate{NihonUCHS}{日本大学文理学部情報科学科\\
+Department of Information Science, College of Humanities and Sciences, Nihon University,
+Setagaya, Tokyo 156-8550}
+\author{藤浪大弥}{FUJINAMI Hiroya}{NihonUCHS}[fnamty.js@gmail.com]
 
 \begin{document}
-\maketitle
 
 \begin{abstract}
-  Property Based Testingは、満たすべき性質をプログラムとして記述し、そのプログラムへの入力データを自動的に生成することでその性質が正しいかを検証する、プログラムのテスト手法の一つである。
-  また、反例が見つかった場合に入力データを縮小し、より検証しやすい形でユーザへ表示することも、Property Based Testingに求められる機能とされている。
-  主要なProperty Based Testingライブラリでは生成と縮小を個別の機能として提供するが、これらを木構造を用いて統合的に行うIntegrated Shrinkingと呼ばれる手法がある。
-  本稿では、Integrated Shrinkingを用いて高階関数を生成する方法を提案する。
-  なお、一般的には関数を引数に取る形の高階関数の生成・縮小を行う方法は知られていないが、本稿で提案する手法はそれを可能にするものである。
+  Property Based Testingは、満たすべき性質(プロパティ)をプログラムとして記述し、そのプログラムへの入力データを自動的に生成することで性質が正しいかを検証する、関数型のプログラミング言語で広く用いられているプログラムのテスト手法の一つである。
+  性質に対して反例が見つかった場合に入力データを縮小し、より理解しやすい単純な形でユーザに表示することも、Property Based Testingライブラリに求められる機能とされている。
+  特に、定義域が有限ではない関数はそのままでは引数と戻り値の対応として表示することが困難なため、縮小は必須である。
+  主要なProperty Based Testingライブラリでは入力データの生成と縮小は個別の機能として提供するが、これらを木構造を用いて統合的に行う、Integrated Shrinkingと呼ばれる手法がある。
+  本発表では、プログラミング言語Scalaを用いた簡潔な(200行程度の)実装で、Integrated Shrinkingによる高階関数の生成と縮小が実現可能であることをデモンストレートする。
+  なお、関数を引数に取るような高階関数の生成と縮小は主要なProperty Based Testingライブラリには実装されていないが、本発表で実装する手法は、それを可能にするものである。
 \end{abstract}
+
+\begin{jkeyword}
+  Property Based Testing, Integrated Shrinking, 関数型プログラミング, 高階関数
+\end{jkeyword}
+
+\etitle{Generatinig Higher-Order Functions with Integrated Shrinking}
+
+\begin{eabstract}
+  Property Based Testing is one of the methods for testing programs widely used in functional programming languages, in which the property to be satisfied is described as program and the input data to the program is automatically generated to check if the property is correct.
+  When a counterexample to the property is found, the input data is simplified and displayed to the user for easier understaning. This feature is called ``shrinking'', which is a required function of Property Based Testing libraries.
+  Especially, functions whose domain is not finite is hard to show as a mapping between the arguments and the return values, thus shrinking is necessary for such data.
+  Although the major Property Based Testing libraries provide input data generation and shrinking as separated functions, there is a method called ``Integrated Shrinking'' which integrates these functions using a tree structure.
+  In this presentation, we demonstrate that a simple (about 200 lines) implementation of Integrated Shrinking in Scala can both generate and shrink higher-oreder functions.
+  In addition, the method we propose can handle the functions that take functions as their arguments, which is not implemented in any of the major libraries.
+\end{eabstract}
+
+\begin{ekeyword}
+  Property Based Testing, Integrated Shrinking, Functional Programming, Higher-Order Functions
+\end{ekeyword}
+
+\maketitle
 
 \section{導入}
 
@@ -33,7 +61,7 @@ Property Based Testingは、プログラムとして記述した満たすべき�
 Proerty Based Testingの実装方法は大きく二通りに分けられる。
 
 \begin{itemize}
-  \item 乱数生成器を用いてランダムに値を生成するもの。この手法を採用した代表的なライブラリとしてQuickCheckがある。
+  \item 乱数生成器を用いてランダムに値を生成するもの。\\この手法を採用した代表的なライブラリとしてQuickCheckがある。
   \item 「小さい」とされる値を順番に生成していくもの。この手法を採用した代表的なライブラリとしてSmallCheckがある。
 \end{itemize}
 
@@ -305,6 +333,7 @@ Integrated ShrinkingはProperty Based Testingの生成と縮小を統合して�
 さらに、戻り値の生成オブジェクトから部分関数を表すデータ構造の生成オブジェクトを生成するようにすることで、高階関数の生成・縮小も可能となる。
 本稿ではそれらのScalaによる実装を示した。
 
+\bibliographystyle{ipsjsort}
 \bibliography{minicheck-ja}
 
 \appendix

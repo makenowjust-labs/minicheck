@@ -48,7 +48,7 @@ def sProduct[A, B](sa: A => LazyList[A],
 
 case class GenShrink[A](g: GenQC[A], s: A => LazyList[A])
 
-case class Tree[A](x: A, ts: LazyList[Tree[A]] = LazyList.empty) {
+case class Tree[A](x: A, ts: LazyList[Tree[A]] = LazyList.empty[Tree[A]]) {
   def map[B](f: A => B): Tree[B] = Tree(f(x), ts.map(_.map(f)))
   def product[B](t: Tree[B]): Tree[(A, B)] =
     Tree((x, t.x), ts.map(_.product(t)) ++ t.ts.map(product(_)))

@@ -1,7 +1,6 @@
-import minitest.SimpleTestSuite
 import minicheck._
 
-object SimpleTestSuite extends SimpleTestSuite {
+class SimpleTestSuite extends munit.FunSuite {
   test("Example 1: Finding a Counterexample and Shrinking") {
     assertEquals(findCounterExampleNoShrink(intGen)(_ > 0), Some(-1002642896))
     assertEquals(findCounterExample(intGen)(_ > 0), Some(-1))
