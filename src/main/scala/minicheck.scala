@@ -80,10 +80,10 @@ case class Empty[A, B]() extends (A :=> B) {
   def map[C](f: B => C): A :=> C = Empty[A, C]()
   def table: LazyList[(A, B)] = LazyList.empty
   def lift: A => Option[B] = _ => None }
-case class Point[B](y: B) extends (Unit :=> B) {
-  def map[C](f: B => C): Unit :=> C = Point(f(y))
-  def table: LazyList[(Unit, B)] = LazyList(((), y))
-  def lift: Unit => Option[B] = _ => Some(y) }
+case class Point[B](y: () => B) extends (Unit :=> B) {
+  def map[C](f: B => C): Unit :=> C = Point(() => f(y()))
+  def table: LazyList[(Unit, B)] = LazyList(((), y()))
+  def lift: Unit => Option[B] = _ => Some(y()) }
 case class Choice[A, B, C](ac: A :=> C, bc: B :=> C) extends (Either[A, B] :=> C) {
   def map[D](f: C => D): Either[A, B] :=> D = Choice(ac.map(f), bc.map(f))
   def table: LazyList[(Either[A, B], C)] =
@@ -109,7 +109,8 @@ case class Fun[A, B](ab: A :=> B, y: B) extends (A => B) {
 
 def sPFun[A, B](s: B => LazyList[B]): (A :=> B) => LazyList[A :=> B] = {
   case Empty() => LazyList.empty
-  case Point(y) => LazyList(Empty[A, B]()) ++ s(y).map(Point(_))
+  case Point(y) => LazyList(Empty[A, B]()) ++
+    LazyList(y).flatMap(y => s(y()).map(y => Point(() => y)))
   case Choice(ac, bc) =>
     sPFun(s)(ac).map(Choice(_, bc)) ++ sPFun(s)(bc).map(Choice(ac, _))
   case Uncurry(abc) => abc.pipe(sPFun(sPFun(s)(_))).map(Uncurry(_))
@@ -125,23 +126,20 @@ trait CogenVariant[A] {
 val unitCogenVariant: CogenVariant[Unit] =
   new CogenVariant[Unit] {
     def variant(r: Random, x: Unit): Random = r
-    def cogen[B](f: Unit => B): Unit :=> B = Point(f(())) }
-def eitherCogenVariant[A, B](ca: CogenVariant[A],
-    cb: CogenVariant[B]): CogenVariant[Either[A, B]] =
-  new CogenVariant[Either[A, B]] {
+    def cogen[B](f: Unit => B): Unit :=> B = Point(() => f(())) }
+def eitherCogenVariant[A, B](ca: CogenVariant[A], cb: CogenVariant[B]):
+  CogenVariant[Either[A, B]] = new CogenVariant[Either[A, B]] {
     def variant(r: Random, x: Either[A, B]): Random =
       x match { case Left(x) => ca.variant(r, x); case Right(x) => cb.variant(r, x) }
     def cogen[C](f: Either[A, B] => C): Either[A, B] :=> C =
       Choice(ca.cogen(x => f(Left(x))), cb.cogen(x => f(Right(x)))) }
-def productCogenVariant[A, B](ca: CogenVariant[A],
-    cb: CogenVariant[B]): CogenVariant[(A, B)] =
-  new CogenVariant[(A, B)] {
+def productCogenVariant[A, B](ca: CogenVariant[A], cb: CogenVariant[B]):
+  CogenVariant[(A, B)] = new CogenVariant[(A, B)] {
     def variant(r: Random, x: (A, B)): Random = cb.variant(ca.variant(r, x._1), x._2)
     def cogen[C](f: ((A, B)) => C): (A, B) :=> C =
       Uncurry(ca.cogen(x => cb.cogen(y => f((x, y))))) }
 
-def funGenShrink[A, B](c: CogenVariant[A],
-    g: GenShrink[B]): GenShrink[Fun[A, B]] =
+def funGenShrink[A, B](c: CogenVariant[A], g: GenShrink[B]): GenShrink[Fun[A, B]] =
   GenShrink(functionGenQC(c.variant, g.g).map(c.cogen).product(g.g)
     .map { case (ab, y) => Fun(ab, y) }, sFun(g.s))
 
@@ -152,10 +150,10 @@ trait Cogen[A] { c =>
 
 val unitCogen: Cogen[Unit] = new Cogen[Unit] {
   def build[B](g: Gen[B]): Gen[Unit :=> B] =
-    Gen { r => val (r1, r2) = r.split;
-      val t: Tree[Unit :=> B] = g.gen(r2)._2.map(Point(_))
-      (r1, t.expand(x =>
-        if (x.isInstanceOf[Point[_]]) LazyList(Empty()) else LazyList.empty)) } }
+    Gen { r => val (r1, r2) = r.split
+      val f: Unit :=> Tree[B] = Point(() => g.gen(r2)._2)
+      val t: Tree[Unit :=> Tree[B]] = Tree(f).expand(sPFun(_.ts))
+      (r1, t.map(_.map(_.x)))} }
 def eitherCogen[A, B](ca: Cogen[A], cb: Cogen[B]): Cogen[Either[A, B]] =
   new Cogen[Either[A, B]] { def build[C](g: Gen[C]): Gen[Either[A, B] :=> C] =
     ca.build(g).product(cb.build(g)).map { case (ga, gb) => Choice(ga, gb) } }
@@ -177,16 +175,26 @@ def functionCogen[A, B](g: Gen[A], c: Cogen[B]): Cogen[A => B] =
     g.product(c.build(gc)).map { case (x, bc) =>
       Iso(f => f(x), (y: B) => LocalFun(x, y), bc) } }
 
-def findCounterExampleNoShrink[A](g: Gen[A])(p: A => Boolean): Option[A] =
-  LazyList.iterate((SplitMix64(42): Random, null: Tree[A])) {
-    case (r, _) => g.gen(r)
-  }.map(_._2).drop(1).take(100).find(t => !p(t.x)).map(_.x)
+def listCogen[A](c: Cogen[A]): Cogen[List[A]] = new Cogen[List[A]] { cl0 =>
+  val cl: Cogen[List[A]] = eitherCogen(unitCogen, productCogen(c, cl0))
+    .imap(_.fold(_ => List.empty, { case (x, xs) => x :: xs}),
+      { case Nil => Left(()); case x :: xs => Right((x, xs)) })
+  def build[B](g: Gen[B]): Gen[List[A] :=> B] = Gen(cl.build(g).gen(_)) }
 
-def findCounterExample[A](g: Gen[A])(p: A => Boolean): Option[A] =
+def conquerCogen: Cogen[Unit] = new Cogen[Unit] {
+  def build[B](g: Gen[B]): Gen[Unit :=> B] = g.map(b => Point(() => b)) }
+def emptyCogen[A]: Cogen[A] = new Cogen[A] {
+  def build[B](g: Gen[B]): Gen[A :=> B] = Gen(r => (r, Tree(Empty()))) }
+
+def genTrees[A](g: Gen[A]): LazyList[(Tree[A])] =
   LazyList.iterate((SplitMix64(42): Random, null: Tree[A])) {
     case (r, _) => g.gen(r)
-  }.map(_._2).drop(1).take(100).find(t => !p(t.x))
-   .map(t => shrinkQC(t, (t: Tree[A]) => t.ts, (t: Tree[A]) => p(t.x)).x)
+  }.map(_._2).drop(1)
+def findCounterExampleNoShrink[A](g: Gen[A])(p: A => Boolean): Option[A] =
+  genTrees(g).take(100).find(t => !p(t.x)).map(_.x)
+def findCounterExample[A](g: Gen[A])(p: A => Boolean): Option[A] =
+  genTrees(g).take(100).find(t => !p(t.x))
+    .map(t => shrinkQC(t, (t: Tree[A]) => t.ts, (t: Tree[A]) => p(t.x)).x)
 
 val intGenQC = GenQC(r => r.next).map(_.toInt)
 val intGen = Gen.from(GenShrink(intGenQC, sInt))

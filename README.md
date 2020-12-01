@@ -1,6 +1,6 @@
 # minicheck
 
-> A state-of-the-art Property-Based-Testing library written in less than 200 lines Scala.
+> A state-of-the-art Property-Based-Testing library written in about 200 lines Scala.
 
 ## About
 
