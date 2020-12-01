@@ -151,7 +151,7 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 乱数生成器が分割可能である、というのは\texttt{Random}が次のようなインターフェースになっていて、\texttt{split}した二つの乱数生成器の生成する乱数が互いに独立しているようなもののことをいう。
 このような性質を満たす乱数生成器としては、SplitMix\cite{steele_jr_fast_2014}などが知られている。
 
-\inputminted[breaklines,firstline=3,lastline=6]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=4,lastline=7]{scala}{../src/main/scala/minicheck.scala}
 
 乱数生成器が分割可能であれば、次のようにして真理値や整数の値を乱数生成器に反映できる。
 
@@ -193,21 +193,21 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 \texttt{:=>}と\texttt{Fun}の縮小関数は次のように定義できる。
 ここで、引数の\texttt{s}は戻り値の型の縮小関数である。
 
-\inputminted[breaklines,firstline=110,lastline=119]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=110,lastline=120]{scala}{../src/main/scala/minicheck.scala}
 
 ここまでを要約すると、値を乱数生成器に反映させる関数と、関数から\texttt{:=>}を構築する関数があれば、関数の生成オブジェクトの引数の型として適当だと考えられる。
 そこで、次のような\texttt{CogenVariant}という型を考える。
 
-\inputminted[breaklines,firstline=121,lastline=123]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=122,lastline=124]{scala}{../src/main/scala/minicheck.scala}
 
 基本的な型の\texttt{CogenVariant}を定義する。
 
-\inputminted[breaklines,firstline=125,lastline=141]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=126,lastline=140]{scala}{../src/main/scala/minicheck.scala}
 
 この\texttt{CogenVariant}と戻り値の値の生成オブジェクトがあれば、次のようにして\texttt{Fun}の\texttt{GenShrink}が得られる。
 \texttt{Fun}は関数クラスを継承しているので、関数が期待されるところで利用できる。
 
-\inputminted[breaklines,firstline=143,lastline=146]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=142,lastline=144]{scala}{../src/main/scala/minicheck.scala}
 
 しかし、\texttt{CogenVariant}の考え方ではIntegrated Shrinkingと統合することが難しい。
 また、関数に対する\texttt{CogenVariant}の定義が可能か不明なため、関数を引数に取る高階関数に対応できない。
@@ -216,13 +216,13 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 つまり、二つの\texttt{Gen}を\texttt{product}で組み合せることで\texttt{Choice}を構築できることが望ましいと思われる。
 この考察にもとづいて、\texttt{Cogen}を次のように定義する。
 
-\inputminted[breaklines,firstline=148,lastline=151]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=146,lastline=149]{scala}{../src/main/scala/minicheck.scala}
 
 なお、\texttt{imap}は両側の変換から\texttt{Cogen}の型を変換する補助関数である。
 
 基本的な型の\texttt{Cogen}を定義する。
 
-\inputminted[breaklines,firstline=153,lastline=167]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=151,lastline=165]{scala}{../src/main/scala/minicheck.scala}
 
 定義が\texttt{CogenVariant}のときと比べて単純になっているのが見て取れる。
 また、\texttt{variant}に相当する内容が元とはやや異なるが、値は反映されるので問題ない。
@@ -230,7 +230,7 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 そして\texttt{Cogen}を使った\texttt{Fun}の\texttt{Gen}を実装する。
 これも\texttt{CogenVariant}のときよりも単純になる。
 
-\inputminted[breaklines,firstline=169,lastline=170]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=167,lastline=168]{scala}{../src/main/scala/minicheck.scala}
 
 最後に、高階関数の生成・縮小手法を説明する。
 \texttt{g: Gen[A]}と\texttt{c: Cogen[B]}があるときに、\texttt{Cogen[A => B]}を構築することを考える。
@@ -240,7 +240,7 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 問題となるのは\texttt{B}を\texttt{A => B}に戻す方法だが、元の\texttt{A}の値は持っているので、その値と戻ってきた\texttt{B}の値を組にして、その値で局所的に定義された関数とすることで\texttt{B}を\texttt{A => B}に変換できる。
 また、局所的に定義された関数を表わすデータ構造\texttt{LocalFun}を定義することで、表示にも対応できる。
 
-\inputminted[breaklines,firstline=172,lastline=178]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,firstline=170,lastline=176]{scala}{../src/main/scala/minicheck.scala}
 
 \texttt{Gen}はIntegrated Shrinkingなので、この時点で縮小まで定義されている。
 このように単純に定義することができたのはIntegrated Shrinkingと\texttt{Cogen}の定義の工夫のためだと思われる。
@@ -259,13 +259,24 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 \texttt{StateT[Random, Tree, A]}のようにモナド変換子を挟むことでMonadとすることも可能だが、この場合生成関数の結果の型が\texttt{Tree[(Random, A)]}となり、頂点の要素のみが乱数で生成されるはずにも関わらず、子の要素まで乱数生成器を持つことになり、その詳細な扱いが不明である。
 実用上もMonadでないと困ることは少ないので、このように定義した。
 
-また、実際の実装では縮小を効率的に行うため、\texttt{:=>}の派生クラスに\texttt{Point}の代わりに次の\texttt{Unlift}を用いるとよい。
+実際の実装では縮小を効率的に行うため、\texttt{:=>}の派生クラスに\texttt{Point}の代わりに次の\texttt{Unlift}を用いるとよい。
 
 \begin{minted}{scala}
 case class Unlift[A, B](dom: Set[A], f: A => B) extends (A :=> B)
 \end{minted}
 
 \texttt{Unlift}は通常の関数\texttt{f}を定義域\texttt{dom}を制限することで部分関数に引き落すデータ構造で、縮小関数は定義域を縮めることで定義される。
+
+現在の実装では\texttt{unitCogen}が\texttt{productCogen}に対する単位元となっていないことには注意する。
+次のように\texttt{conquerCogen}を定義すると、これは\texttt{productCogen}に対する単位元となる。
+また、次の\texttt{emptyCogen}は\texttt{eitherCogen}に対する単位元となる。
+
+\inputminted[breaklines,firstline=184,lastline=187]{scala}{../src/main/scala/minicheck.scala}
+
+しかし、\texttt{conquerCogen}は関数の生成のために戻り値の生成オブジェクトを呼び出す必要があり、再帰的な構造を受け付ける\texttt{Cogen}を定義したい場合に問題になる。
+加えて\texttt{Point}が\texttt{Empty}に縮小されないため、関数が適切に縮小されない可能性がある。
+一方、\texttt{emptyCogen}は簡潔に定義できている。
+このギャップを埋めることは今後の課題と言える。
 
 現在は関数を引数に取る関数の場合\texttt{\{case \{case x => y\} => ...\}}のように、関数が\texttt{case}の条件節に現れる、実際にはマッチしない形になっているが、これを\texttt{f => f(x) match \{ case y => ...\}}のように表示することも可能である。
 
@@ -286,7 +297,7 @@ case class Unlift[A, B](dom: Set[A], f: A => B) extends (A :=> B)
     また、その特徴のため導入で示した例\ref{exm:shrink}のような、大きな値でしか反例が見つからない場合に、現実的な時間で反例を見つけられない問題がある。
 \end{description}
 
-また、今回提案する手法はIntegrated Shrinkingと不可分というわけではなく、\texttt{Cogen}で部分関数のデータ構造の生成オブジェクトを返すようにすることでQuickCheckやHedgeHogでも同様の実装が可能だと考えられる。
+また、今回提案する手法はIntegrated Shrinkingと不可分というわけではなく、\texttt{Cogen}で部分関数のデータ構造の生成オブジェクトを返すようにすることでQuickCheckやHedgehogでも同様の実装が可能だと考えられる。
 
 \section{結論}
 
