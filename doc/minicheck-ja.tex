@@ -1,4 +1,4 @@
-\documentclass[submit,PRO,onecolumn]{ipsj}
+\documentclass[submit,PRO]{ipsj}
 
 \usepackage{PROpresentation}
 \PROheadtitle{y-n-(x): 情報処理学会プログラミング研究会 発表資料 Y年m月d日}
@@ -6,11 +6,14 @@
 \usepackage{amsthm}
 \usepackage{enumitem}
 \usepackage[dvipdfmx]{graphicx}
-\usepackage[cache=false]{minted}
+\usepackage{minted}
+\usepackage{mdframed}
 \usepackage{url}
 
 \theoremstyle{definition}
 \newtheorem{example}{例}
+
+\renewcommand{\listingscaption}{コード}
 
 % http://gaso.hatenablog.com/entry/2014/05/11/%E6%9F%90%E5%AD%A6%E4%BC%9A%E3%83%86%E3%83%B3%E3%83%97%E3%83%AC%E3%81%AE%E3%82%B9%E3%82%BF%E3%82%A4%E3%83%AB%E3%83%95%E3%82%A1%E3%82%A4%E3%83%AB%E3%81%A7BibTeX%E3%82%92%E4%BD%BF%E3%81%A3%E3%81%9F%E6%99%82
 \def\newblock{\hskip .11em plus .33em minus .07em}
@@ -76,8 +79,10 @@ Proerty Based Testingの実装方法は大きく二通りに分けられる。
 この性質はもちろん偽なので反例が見つかるが、縮小を行わない上の例では\texttt{-1002642896}という大きな反例が表示され、一方縮小を行なった下の例では\texttt{-1}という最小と呼べる反例が表示される。
 
 \begin{minted}{scala}
-findCounterExampleNoShrink(intGen)(_ > 0) // Some(-1002642896)
-findCounterExample(intGen)(_ > 0)         // Some(-1)
+findCounterExampleNoShrink(intGen)(_ > 0)
+// Some(-1002642896)
+findCounterExample(intGen)(_ > 0)
+// Some(-1)
 \end{minted}
 \end{example}
 
@@ -100,15 +105,18 @@ Integrated Shrinkingを用いることの利点はいくつかあり、特に重
 
 \begin{example}[関数を引数に取る関数の生成・縮小]\label{exm:shrink}
 \texttt{\_ - 1000000000 >= 0}と\texttt{\_ >= 1000000000}は同じ関数に見えるが、オーバーフローが起こると差異が出る。
-次の例ではこのような場合を区別できる関数を生成して、反例を示している。
+コード\ref{lst:example-hofun}ではこのような場合を区別できる関数を生成して、反例を示している。
 なお、表示される関数は十分に最小化されている。
 
-\begin{minted}{scala}
-findCounterExample(
-  funGen(functionCogen(intGen, booleanCogen), booleanGen)
-) { f => f(_ - 1000000000 >= 0) == f(_ >= 1000000000) }
-// Some({case {case -1147483649 => false} => true; case _ => false})
-\end{minted}
+\begin{listing*}[htb]
+  \begin{minted}[autogobble]{scala}
+    findCounterExample(funGen(functionCogen(intGen, booleanCogen), booleanGen)) { f =>
+      f(_ - 1000000000 >= 0) == f(_ >= 1000000000)
+    } // Some({case {case -1147483649 => false} => true; case _ => false})
+  \end{minted}
+  \caption{関数を引数に取る関数の生成・縮小の例}
+  \label{lst:example-hofun}
+  \end{listing*}
 \end{example}
 
 \section{実装}
@@ -124,44 +132,41 @@ Scalaは関数型プログラミング言語の一つだが、オブジェクト
 
 従来のライブラリ(QuickCheck\cite{claessen_quickcheck_2011})でどのように値の生成・縮小が実装されているのかを確認した上で、Integrated Shrinkingを実装し紹介する。
 
-QuickCheckでは、値の生成をするオブジェクトは次のようになっている。
+この章の内容はコード\ref{lst:gen}を参照しながら行う。
+
+\begin{listing*}[hbt]
+  \inputminted[breaklines,autogobble,linenos,firstline=35,lastline=76]{scala}{../src/main/scala/minicheck.scala}
+  \caption{\texttt{Gen}などの実装}
+  \label{lst:gen}
+\end{listing*}
+
+QuickCheckでは、値の生成をするオブジェクトはコード\ref{lst:gen}の35行目から42行目のようになっている。
 ここで、\texttt{Random}は乱数生成器の型で不変なものとする。
 つまり、\texttt{gen}は引数として乱数生成器を受け取り、生成後の状態の乱数生成器と生成した値の組を返す関数である。
 
-\inputminted[breaklines,firstline=31,lastline=35]{scala}{../src/main/scala/minicheck.scala}
-
 また、\texttt{map}のように既存の生成オブジェクトからの変換を与えることで別の型の生成オブジェクトを得たり、\texttt{product}のように複数の生成オブジェクトを組み合わせることもできる。
 
-一方、縮小は次のように、縮小関数\texttt{s}を値に再帰的に適用することで、性質\texttt{p}を満たさない最小の反例を探索することで実装される。
+一方、縮小はコード\ref{lst:gen}の44行目から45行目のように、縮小関数\texttt{s}を値に再帰的に適用することで、性質\texttt{p}を満たさない最小の反例を探索することで実装される。
 ここで、縮小関数は値からより小さな値のリストを昇順で返すものとする。
 なお、縮小関数の返す値を引数の値より小さな値としたが、この「小さい」はテストの反例の表示としてより優れていると期待されるという意味で、一般的な数学的な順序とは異なるものであることに注意する。
 
-\inputminted[breaklines,firstline=37,lastline=38]{scala}{../src/main/scala/minicheck.scala}
-
-例として真理値と整数の縮小関数を示す。
+例として真理値と整数の縮小関数をコード\ref{lst:gen}の47行目から48行目に示す。
 \texttt{sBool}は\texttt{true}のときは\texttt{false}のみを含むリストを、\texttt{false}のときは空リストを返し、\texttt{true}よりも\texttt{false}の方が好ましい表示としていることを意味する。
 \texttt{sInt}は\texttt{sInt(10) = LazyList(5, 8, 9)}と、\texttt{x/2}から\texttt{x-1}へと倍々に近付いていくリストを返す関数で、\texttt{0}に近いほど好ましい表示としている。
 
-\inputminted[breaklines,firstline=40,lastline=43]{scala}{../src/main/scala/minicheck.scala}
-
-また、値の組に対する縮小関数は、各値に対する縮小関数から次のように定義できる。
+また、値の組に対する縮小関数は、各値に対する縮小関数からコード\ref{lst:gen}の50行目から51行目のように定義できる。
 この場合、左の値が小さい方が右の値が小さいものよりも好ましいとしている。
-
-\inputminted[breaklines,firstline=45,lastline=47]{scala}{../src/main/scala/minicheck.scala}
 
 QuickCheckでは生成オブジェクトや縮小関数をカスタマイズして性質のテストを実行することができる。
 しかし、生成オブジェクトと縮小関数が個別に提供されていて、ある型の生成オブジェクトを実装した場合、縮小関数も個別に実装しなければいけない。
 
-この問題への単純な対処法として、次のように生成オブジェクトを縮小関数との組にすることが考えられる。
-
-\inputminted[breaklines,firstline=49,lastline=49]{scala}{../src/main/scala/minicheck.scala}
+この問題への単純な対処法として、コード\ref{lst:gen}の53行目のように生成オブジェクトを縮小関数との組にすることが考えられる。
 
 しかし、このように生成オブジェクトを定義した場合、型パタメータ\texttt{A}が縮小関数の引数にも現れているため、\texttt{GenQC}では定義できていた\texttt{map}を定義することが困難となる。
 そこで、縮小の過程を木構造として見做すことを考える。
 縮小関数に適用された値を親、その結果を子とするような木構造とする。
 そして、単一の値の代わりにこの木構造を生成オブジェクトが返すようにする。
-
-\inputminted[breaklines,firstline=51,lastline=66]{scala}{../src/main/scala/minicheck.scala}
+このような実装をコード\ref{lst:gen}の55行目から76行目に示す。
 
 \texttt{expand}は親の値を縮小関数を適用して展開し、木構造を構築するメソッドである。
 これを使うことで\texttt{GenShrink}から\texttt{Gen}への変換を定義できる(\texttt{Gen.from})。
@@ -175,109 +180,118 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 
 \subsection{関数の生成・縮小}
 
+この章の内容はコード\ref{lst:fun}, \ref{lst:cogen-variant}, \ref{lst:cogen}を参照しながら行う。
+
+\begin{listing*}[hbt]
+  \inputminted[breaklines,autogobble,linenos,firstline=78,lastline=127]{scala}{../src/main/scala/minicheck.scala}
+  \caption{\texttt{Fun}などの実装}
+  \label{lst:fun}
+\end{listing*}
+
+\begin{listing*}[hbt]
+  \inputminted[breaklines,autogobble,linenos,firstline=129,lastline=162]{scala}{../src/main/scala/minicheck.scala}
+  \caption{\texttt{CogenVariant}などの実装}
+  \label{lst:cogen-variant}
+\end{listing*}
+
+\begin{listing*}[hbt]
+  \inputminted[breaklines,autogobble,linenos,firstline=164,lastline=203]{scala}{../src/main/scala/minicheck.scala}
+  \caption{\texttt{Cogen}などの実装}
+  \label{lst:cogen}
+\end{listing*}
+
 関数の生成・縮小の方法を説明する前に、乱数生成器が分割可能であるとはどのようなことか説明する。
 乱数生成器が分割可能である、というのは\texttt{Random}が次のようなインターフェースになっていて、\texttt{split}した二つの乱数生成器の生成する乱数が互いに独立しているようなもののことをいう。
 このような性質を満たす乱数生成器としては、SplitMix\cite{steele_jr_fast_2014}などが知られている。
 
-\inputminted[breaklines,firstline=4,lastline=7]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[breaklines,autogobble,linenos,firstline=4,lastline=8]{scala}{../src/main/scala/minicheck.scala}
 
-乱数生成器が分割可能であれば、次のようにして真理値や整数の値を乱数生成器に反映できる。
-
-\inputminted[breaklines,firstline=68,lastline=70]{scala}{../src/main/scala/minicheck.scala}
-
-そして、値を乱数生成器に反映する関数と、返り値の生成オブジェクトから、関数の生成オブジェクトが構築できる。
-
-\inputminted[breaklines,firstline=72,lastline=73]{scala}{../src/main/scala/minicheck.scala}
+乱数生成器が分割可能であれば、コード\ref{lst:fun}の78行目から80行目のようにして真理値や整数の値を乱数生成器に反映できる。
+そして、82行目から84行目のように、値を乱数生成器に反映する関数と返り値の生成オブジェクトから、関数の生成オブジェクトが構築できる。
 
 ただし、このままでは関数を縮小し表示することはできない。
-そこで、部分関数を表現する遅延されたデータ構造\texttt{:=>}と、デフォルト値を補うことでそれを全域にした\texttt{Fun}というデータ構造を導入する。
-
-\inputminted[breaklines,firstline=75,lastline=108]{scala}{../src/main/scala/minicheck.scala}
+そこで、コード\ref{lst:fun}の86行目から127行目にかけて定義する、部分関数を表現する遅延されたデータ構造\texttt{:=>}と、デフォルト値を補うことでそれを全域にした\texttt{Fun}というデータ構造を導入する。
 
 \texttt{:=>}は次の操作をサポートしている。
 
 \begin{description}
-  \item[\texttt{map[C](f: B => C): A :=> C}.] 戻り値の型を変換する補助関数
-  \item[\texttt{table: LazyList[(A, B)]}.] 引数の値とその引数を与えたときの戻り値を列挙する
-  \item[\texttt{lift: A => Option[B]}.] \texttt{:=>}を通常の関数\texttt{=>}に変換する
+  \item[\texttt{map[C](f:\ B => C): A :=> C}.] ~\newline
+    戻り値の型を変換する補助関数
+  \item[\texttt{table:\ LazyList[(A, B)]}.] ~\newline
+    引数の値とその引数を与えたときの戻り値を列挙する
+  \item[\texttt{lift:\ A => Option[B]}.] ~\newline
+    \texttt{:=>}を通常の関数\texttt{=>}に変換する
 \end{description}
 
 また、\texttt{:=>}を継承したクラスにはそれぞれ次のような意味がある。
 
 \begin{description}
-  \item[\texttt{Empty[A, B] extends (A :=> B)}.] 空の部分関数を表す
-  \item[\texttt{Point[B](y: B) extends (Unit :=> B)}.] ユニット型からある値への部分関数を表す
-  \item[\texttt{Choice[A, B, C](ab: A :=> C, bc: B :=> C) extends (Either[A, B] => C)}.] ~\newline
-    \hspace{2em} 2つの部分関数から\texttt{Either}を受け取る部分関数を構築する
-  \item[\texttt{Uncurry[A, B, C](abc: A :=> (B :=> C)) extends ((A, B) :=> C)}.] ~\newline
-    \hspace{2em} カリー化された部分関数を、タプルを受け取るものにする
-  \item[\texttt{Iso[A, B, C](f: A => B, g: B => A, bc B :=> C) extends (A :=> C)}.] ~\newline
-    \hspace{2em} 両側からの変換を与えることで引数の型の変更した部分関数を構築する
+  \item[\texttt{Empty[A,B]}.] 空の部分関数を表す。
+  \item[\texttt{Point[B](y:\ B)}.]~\newline
+    ユニット型からある値への部分関数を表す。
+  \item[\texttt{Choice[A,B,C](ab:\ A :=> C, bc:\ B :=> C)}.] ~\newline
+    2つの部分関数から\texttt{Either}を受け取る部分関数を構築する。
+  \item[\texttt{Uncurry[A,B,C](abc:\ A :=> (B :=> C))}.] ~\newline
+    カリー化された部分関数を、タプルを受け取るものにする。
+  \item[\texttt{Iso[A,B,C](f:\ A => B, g:\ B => A, bc:\ B :=> C)}.] ~\newline
+    両側からの変換を与えることで引数の型の変更した部分関数を構築する。
 \end{description}
 
 そして、\texttt{Fun}は部分関数とデフォルト値を組にして持つことで部分関数を全域にしたデータ構造で、\texttt{table}メソッドを使うことで\texttt{toString}メソッドで関数の内容が表示できるようになっている。
 なお、\texttt{:=>}は遅延しているとはいえ関数そのものを表しているデータ構造なので、何らか縮小しなければ表示することは難しい。
 
-\texttt{:=>}と\texttt{Fun}の縮小関数は次のように定義できる。
+\texttt{:=>}と\texttt{Fun}の縮小関数はコード\ref{lst:cogen-variant}の129行目から139行目のように定義できる。
 ここで、引数の\texttt{s}は戻り値の型の縮小関数である。
 
-\inputminted[breaklines,firstline=110,lastline=120]{scala}{../src/main/scala/minicheck.scala}
-
 ここまでを要約すると、値を乱数生成器に反映させる関数と、関数から\texttt{:=>}を構築する関数があれば、関数の生成オブジェクトの引数の型として適当だと考えられる。
-そこで、次のような\texttt{CogenVariant}という型を考える。
+そこで、コード\ref{lst:cogen-variant}の141行目から144行目のような、\texttt{CogenVariant}という型を考える。
 
-\inputminted[breaklines,firstline=122,lastline=124]{scala}{../src/main/scala/minicheck.scala}
+基本的な型の\texttt{CogenVariant}をコード\ref{lst:cogen-variant}の146行目から162行目で定義する。
 
-基本的な型の\texttt{CogenVariant}を定義する。
-
-\inputminted[breaklines,firstline=126,lastline=140]{scala}{../src/main/scala/minicheck.scala}
-
-この\texttt{CogenVariant}と戻り値の値の生成オブジェクトがあれば、次のようにして\texttt{Fun}の\texttt{GenShrink}が得られる。
+この\texttt{CogenVariant}と戻り値の値の生成オブジェクトがあれば、コード\ref{lst:cogen}の164行目から165行目のようにして\texttt{Fun}の\texttt{GenShrink}が得られる。
 \texttt{Fun}は関数クラスを継承しているので、関数が期待されるところで利用できる。
-
-\inputminted[breaklines,firstline=142,lastline=144]{scala}{../src/main/scala/minicheck.scala}
 
 しかし、\texttt{CogenVariant}の考え方ではIntegrated Shrinkingと統合することが難しい。
 また、関数に対する\texttt{CogenVariant}の定義が可能か不明なため、関数を引数に取る高階関数に対応できない。
 
 \texttt{:=>}に対する縮小関数を観察すると、\texttt{Choice}の縮小は\texttt{sProduct}の実装に類似していることが分かる。
 つまり、二つの\texttt{Gen}を\texttt{product}で組み合せることで\texttt{Choice}を構築できることが望ましいと思われる。
-この考察にもとづいて、\texttt{Cogen}を次のように定義する。
-
-\inputminted[breaklines,firstline=146,lastline=149]{scala}{../src/main/scala/minicheck.scala}
+この考察にもとづいて、\texttt{Cogen}をコード\ref{lst:cogen}の167行目から172行目のように定義する。
 
 なお、\texttt{imap}は両側の変換から\texttt{Cogen}の型を変換する補助関数である。
 
-基本的な型の\texttt{Cogen}を定義する。
-
-\inputminted[breaklines,firstline=151,lastline=165]{scala}{../src/main/scala/minicheck.scala}
+基本的な型の\texttt{Cogen}をコード\ref{lst:cogen}の174行目から191行目に定義する。
 
 定義が\texttt{CogenVariant}のときと比べて単純になっているのが見て取れる。
 また、\texttt{variant}に相当する内容が元とはやや異なるが、値は反映されるので問題ない。
 
-そして\texttt{Cogen}を使った\texttt{Fun}の\texttt{Gen}を実装する。
+そして\texttt{Cogen}を使った\texttt{Fun}の\texttt{Gen}をコード\ref{lst:cogen}の193行目で実装する。
 これも\texttt{CogenVariant}のときよりも単純になる。
 
-\inputminted[breaklines,firstline=167,lastline=168]{scala}{../src/main/scala/minicheck.scala}
-
 最後に、高階関数の生成・縮小手法を説明する。
-\texttt{g: Gen[A]}と\texttt{c: Cogen[B]}があるときに、\texttt{Cogen[A => B]}を構築することを考える。
+実際の実装はコード\ref{lst:cogen}の195行目から203行目に対応する。
+
+\texttt{g:\ Gen[A]}と\texttt{c:\ Cogen[B]}があるときに、\texttt{Cogen[A => B]}を構築することを考える。
 この\texttt{build}関数では\texttt{gc: Gen[C]}を受け取って\texttt{Gen[(A => B) :=> C]}を返す必要がある。
 \texttt{g}があることから\texttt{A}の値と、\texttt{c}と\texttt{gc}があることから\texttt{Gen[B :=> C]}は得ることができる。
 よって、生成した\texttt{A}の値と実際に渡された\texttt{A => B}の関数から\texttt{B}を得て、生成した\texttt{B :=> C}に渡すようにすれば、\texttt{(A => B) :=> C}の値のうち一方向は得られそうである。
 問題となるのは\texttt{B}を\texttt{A => B}に戻す方法だが、元の\texttt{A}の値は持っているので、その値と戻ってきた\texttt{B}の値を組にして、その値で局所的に定義された関数とすることで\texttt{B}を\texttt{A => B}に変換できる。
 また、局所的に定義された関数を表わすデータ構造\texttt{LocalFun}を定義することで、表示にも対応できる。
 
-\inputminted[breaklines,firstline=170,lastline=176]{scala}{../src/main/scala/minicheck.scala}
-
 \texttt{Gen}はIntegrated Shrinkingなので、この時点で縮小まで定義されている。
 このように単純に定義することができたのはIntegrated Shrinkingと\texttt{Cogen}の定義の工夫のためだと思われる。
 
-\ref{sec:appndix-1}に、乱数生成器や反例を探す関数などを含めた、このProperty Based Testingライブラリのソースコードの全文を添付する。
+付録\ref{sec:appndix-1}に、乱数生成器や反例を探す関数などを含めた、このProperty Based Testingライブラリのソースコードの全文を添付する。
 
 \section{考察}
 
 \subsection{実装について}
+
+\begin{listing*}[hbt]
+  \inputminted[breaklines,autogobble,linenos,firstline=211,lastline=216]{scala}{../src/main/scala/minicheck.scala}
+  \caption{\texttt{conquerCogen}と\texttt{emptyCogen}の実装}
+  \label{lst:conquer-empty}
+\end{listing*}
 
 今回の実装では含めなかったが、値を\texttt{Option}で包むことで、生成される値を制限する\texttt{Gen\#filter}のようなメソッドを定義することができる。
 この場合、\texttt{Cogen}で生成する部分関数の戻り値の型も\texttt{Option}に包まれることになる。
@@ -290,23 +304,22 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 実際の実装では縮小を効率的に行うため、\texttt{:=>}の派生クラスに\texttt{Point}の代わりに次の\texttt{Unlift}を用いるとよい。
 
 \begin{minted}{scala}
-case class Unlift[A, B](dom: Set[A], f: A => B) extends (A :=> B)
+case class Unlift[A, B](dom: Set[A], f: A => B)
+  extends (A :=> B)
 \end{minted}
 
 \texttt{Unlift}は通常の関数\texttt{f}を定義域\texttt{dom}を制限することで部分関数に引き落すデータ構造で、縮小関数は定義域を縮めることで定義される。
 
 現在の実装では\texttt{unitCogen}が\texttt{productCogen}に対する単位元となっていないことには注意する。
-次のように\texttt{conquerCogen}を定義すると、これは\texttt{productCogen}に対する単位元となる。
-また、次の\texttt{emptyCogen}は\texttt{eitherCogen}に対する単位元となる。
-
-\inputminted[breaklines,firstline=184,lastline=187]{scala}{../src/main/scala/minicheck.scala}
+コード\ref{lst:conquer-empty}の211行目から213行目のように\texttt{conquerCogen}を定義すると、これは\texttt{productCogen}に対する単位元となる。
+また、214行目から216行目の\texttt{emptyCogen}は\texttt{eitherCogen}に対する単位元となる。
 
 しかし、\texttt{conquerCogen}は関数の生成のために戻り値の生成オブジェクトを呼び出す必要があり、再帰的な構造を受け付ける\texttt{Cogen}を定義したい場合に問題になる。
 加えて\texttt{Point}が\texttt{Empty}に縮小されないため、関数が適切に縮小されない可能性がある。
 一方、\texttt{emptyCogen}は簡潔に定義できている。
 このギャップを埋めることは今後の課題と言える。
 
-現在は関数を引数に取る関数の場合\texttt{\{case \{case x => y\} => ...\}}のように、関数が\texttt{case}の条件節に現れる、実際にはマッチしない形になっているが、これを\texttt{f => f(x) match \{ case y => ...\}}のように表示することも可能である。
+現在は関数を引数に取る関数の場合\texttt{\{case \{case x => y\} => ...\}}のように、関数が\texttt{case}の条件節に現れる、実際にはマッチしない形になっているが、これを\texttt{f => f(x) match \{case y => ..\}}のように表示することも可能である。
 
 \subsection{既存のライブラリとの比較}
 
@@ -320,7 +333,9 @@ case class Unlift[A, B](dom: Set[A], f: A => B) extends (A :=> B)
   \item[(Hedgehog\cite{hedgehog_online})]
     Integrated Shrinkingだが、関数の生成・縮小をサポートしていない。
     外部のライブラリ\cite{hedgehog-fn_online}を利用することで関数の生成が可能になるが、この実装はQuickCheckのものを移植したもので、本稿で説明するものとは異なる。
-  \item[(SmallCheck\cite{runciman_smallcheck_2008}、Feat\cite{duregaard_feat_2012}、SmartCheck\cite{pike_smartcheck_2014}、LeanCheck\cite{matela_braquehais_tools_2017})]
+  \item[小さい値を列挙するライブラリ]
+    (SmallCheck\cite{runciman_smallcheck_2008}, Feat\cite{duregaard_feat_2012}, SmartCheck\cite{pike_smartcheck_2014}, LeanCheck\cite{matela_braquehais_tools_2017})
+
     高階関数の生成・縮小をサポートしているものもあるが、これらは乱数生成器を用いず、小さな値から順番に列挙するというアプローチを取っており、今回のものとは根本的に異なる。
     また、その特徴のため導入で示した例\ref{exm:shrink}のような、大きな値でしか反例が見つからない場合に、現実的な時間で反例を見つけられない問題がある。
 \end{description}
@@ -336,10 +351,10 @@ Integrated ShrinkingはProperty Based Testingの生成と縮小を統合して�
 \bibliographystyle{ipsjsort}
 \bibliography{minicheck-ja}
 
-\appendix
+\onecolumn\appendix
 
-\section{本稿で実装したProperty Based Testingライブラリ}\label{sec:appndix-1}
+\section{本稿で実装したProperty Based Testingライブラリの全体}\label{sec:appndix-1}
 
-\inputminted[breaklines]{scala}{../src/main/scala/minicheck.scala}
+\inputminted[autogobble,breaklines,linenos,fontsize=\scriptsize]{scala}{../src/main/scala/minicheck.scala}
 
 \end{document}
