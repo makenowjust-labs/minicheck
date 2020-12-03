@@ -1,9 +1,9 @@
-pdfs := minicheck-ja.pdf minicheck-en.pdf
+pdf := minicheck-ja.pdf
 
-all: $(pdfs)
+all: $(pdf)
 
 %.pdf: %.tex %.bib
-	cluttex -exelatex --shell-escape --bibtex=bibtex --package-support=minted $<
+	latexmk $<
 
 clean:
-	rm -f $(pdfs)
+	rm -rf $(pdf) _minted-*/ *.bbl
