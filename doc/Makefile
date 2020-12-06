@@ -6,4 +6,5 @@ all: $(pdf)
 	latexmk $<
 
 clean:
+	latexmk -C
 	rm -rf $(pdf) _minted-*/ *.bbl

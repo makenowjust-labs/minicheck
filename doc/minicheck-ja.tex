@@ -296,10 +296,10 @@ Integrated Shrinkingは2017年にStanleyによって紹介された\cite{stanley
 今回の実装では含めなかったが、値を\texttt{Option}で包むことで、生成される値を制限する\texttt{Gen\#filter}のようなメソッドを定義することができる。
 この場合、\texttt{Cogen}で生成する部分関数の戻り値の型も\texttt{Option}に包まれることになる。
 
-今回の実装の\texttt{Gen}の型は\texttt{State}モナドを使って、\texttt{type G[A] = State[Random, Tree[A]]}に同型だが、モナド変換子を使っていないことからも分かるように、これはMonadとはならない。
-一方FunctorやApplicativeとなることは定義より明らかである。
-\texttt{StateT[Random, Tree, A]}のようにモナド変換子を挟むことでMonadとすることも可能だが、この場合生成関数の結果の型が\texttt{Tree[(Random, A)]}となり、頂点の要素のみが乱数で生成されるはずにも関わらず、子の要素まで乱数生成器を持つことになり、その詳細な扱いが不明である。
-実用上もMonadでないと困ることは少ないので、このように定義した。
+今回の実装の\texttt{Gen}の型は\texttt{State}モナドを使って、\texttt{type G[A] = State[Random, Tree[A]]}に同型だが、モナド変換子を使っていないことからも分かるように、これはモナドとはならない。
+一方関手やアプリカティブ関手となることは定義より明らかである。
+\texttt{StateT[Random, Tree, A]}のようにモナド変換子を挟むことでモナドとすることも可能だが、この場合生成関数の結果の型が\texttt{Tree[(Random, A)]}となり、頂点の要素のみが乱数で生成されるはずにも関わらず、子の要素まで乱数生成器を持つことになり、その詳細な扱いが不明である。
+実用上もモナドでないと困ることは少ないので、このように定義した。
 
 実際の実装では縮小を効率的に行うため、\texttt{:=>}の派生クラスに\texttt{Point}の代わりに次の\texttt{Unlift}を用いるとよい。
 
